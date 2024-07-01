@@ -30,7 +30,7 @@ class RMSNorm(torch.nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
 
-    def _norm(self, x):
+    def _norm(self, x: torch.Tensor) -> torch.Tensor:
         """
         Compute the root mean square normalization. Use Equation 4 under
         Section 4 of https://arxiv.org/abs/1910.07467 as a reference. Add 
@@ -43,10 +43,11 @@ class RMSNorm(torch.nn.Module):
         Returns:
             torch.Tensor: The normalized tensor.
         """
-        # todo
-        raise NotImplementedError
+        rms_x = torch.sqrt(torch.mean(x ** 2) + self.eps)
+        x_norm = x / rms_x
+        return x_norm
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Apply the root mean square normalizer.
 
@@ -93,8 +94,12 @@ class Attention(nn.Module):
         Make sure to use attention_dropout (self.attn_dropout) on the computed
         attention matrix before applying it to the value tensor.
         '''
-        # todo
-        raise NotImplementedError
+        # pseudocode: attn(Q,K,V) = (softmax((Q*K.T)/sqrt(K.dimensions)) * attn_dropout) * V
+        d_k = key.shape[-1]
+        scores = torch.matmul(query, key.transpose(-2, -1)) / torch.sqrt(d_k)
+        attn_weights = torch.softmax(scores, dim=-1)
+        attn_weights = self.attn_dropout(attn_weights)
+        return torch.matmul(attn_weights, value)
 
     def forward(
         self,
@@ -196,8 +201,15 @@ class LlamaLayer(nn.Module):
         5) add a residual connection from the unnormalized self-attention output to the
            output of the feed-forward network
         '''
-        # todo
-        raise NotImplementedError
+        # 1
+        h = self.layer_norm(x)
+        # 2
+        attn_output = self.attention.forward(h)
+        # 3
+        h = self.attention_norm.forward(attn_output + x)
+        # 4,5
+        h = self.ffn_norm.forward(h) + attn_output
+        return h
 
 class Llama(LlamaPreTrainedModel):
     def __init__(self, config: LlamaConfig):
