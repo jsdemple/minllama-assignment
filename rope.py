@@ -23,6 +23,7 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
     shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
     return freqs_cis.view(shape)
 
+
 def apply_rotary_emb(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -50,8 +51,7 @@ def apply_rotary_emb(
 
     _, seqlen, _, _ = query.shape
     device = query.device
-    # todo
-    #
+
     # Please refer to slide 22 in https://phontron.com/class/anlp2024/assets/slides/anlp-05-transformers.pdf
     # and Section 3 in https://arxiv.org/abs/2104.09864.
 
@@ -63,13 +63,31 @@ def apply_rotary_emb(
 
     # First, compute the trigonometric values in the second and fourth columns in
     # slide 22 (linked above).
+    #      theta * ((2 * (i-1))/d)
+    # cos = cos(m theta 1), cos(m theta 1), cos(m theta 2), cos(m theta 2), ... cos(m theta d/2), cos(m theta d/2)
+    # sin = sin(m theta 1), sin(m theta 1), sin(m theta 2), sin(m theta 2), ... sin(m theta d/2), sin(m theta d/2)
+    freqs = torch.arange(0, head_dim, 2).float().to(device)
+    freqs = freqs / head_dim * (1 / theta)
+    freqs = torch.pow(theta, -freqs)
+    m = torch.arange(seqlen, device=device)
+    freqs = torch.outer(m, freqs)
+    cos = torch.cos(freqs)
+    sin = torch.sin(freqs)
+    cos = reshape_for_broadcast(cos, query_real)
+    sin = reshape_for_broadcast(sin, query_real)
 
     # Then, combine these trigonometric values with the tensors query_real, query_imag,
     # key_real, and key_imag.
+    def interlace(x, y):
+        shape = x.shape[:-1] + (x.shape[-1] + y.shape[-1],)
+        return torch.stack((x, y), dim=-1).reshape(shape)
 
-    raise NotImplementedError
+    query_out = (
+        interlace(query_real * cos - query_imag * sin, query_imag * cos + query_real * sin)
+    )
+    key_out = (
+        interlace(key_real * cos - key_imag * sin, key_imag * cos + key_real * sin)
+    )
 
-    query_out = None
-    key_out = None
     # Return the rotary position embeddings for the query and key tensors
     return query_out, key_out
